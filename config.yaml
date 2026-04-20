@@ -1,0 +1,130 @@
+# vmware-migration-agent — runtime configuration
+# All agent behaviour is controlled from here. No hardcoded values in source code.
+
+# ─── LLM ────────────────────────────────────────────────────────────────────
+llm:
+  # provider: anthropic | openai | google
+  provider: anthropic
+
+  # Model per provider — change here, not in code
+  models:
+    anthropic: claude-sonnet-4-5
+    openai: gpt-4o
+    google: gemini-2.0-flash
+
+  # Temperature rules — do not raise these values
+  # HCL generation must be deterministic
+  temperature_hcl: 0.0
+  # Report/review notes can be slightly more natural
+  temperature_report: 0.2
+
+  max_tokens: 8192
+  timeout_seconds: 120
+
+# ─── TARGET CLOUD ────────────────────────────────────────────────────────────
+# aws | azure | gcp | openstack
+target_cloud: aws
+
+# ─── PIPELINE BEHAVIOUR ──────────────────────────────────────────────────────
+pipeline:
+  # How many ComputeUnits to process per LangGraph batch execution
+  batch_size: 50
+
+  # Max LLM retry attempts per resource before quarantining
+  max_retries: 3
+
+  # Stop the entire run if more than this % of resources are blocked
+  # Set to 1.0 to never stop (process all clean resources regardless)
+  abort_threshold_pct: 0.5
+
+# ─── VALIDATION ──────────────────────────────────────────────────────────────
+validation:
+  run_terraform_validate: true
+  run_tflint: true
+  run_opa: true
+
+  # Path to terraform binary (must be in container image)
+  terraform_bin: terraform
+
+  # Path to tflint binary
+  tflint_bin: tflint
+
+  # OPA server mode or binary mode
+  # binary: runs `opa eval` locally (default for CI)
+  # server: calls OPA server at opa_server_url
+  opa_mode: binary
+  opa_bin: opa
+  opa_server_url: ""  # only used if opa_mode = server
+
+  # Path to .rego policy bundle
+  policies_dir: validation/policies
+
+# ─── MCP DOCUMENTATION CONTEXT ───────────────────────────────────────────────
+mcp:
+  enabled: true
+  tool_timeout_seconds: 30
+  terraform:
+    image: "hashicorp/terraform-mcp-server:latest"
+    toolsets: "registry"
+
+# ─── OUTPUT ──────────────────────────────────────────────────────────────────
+output:
+  base_dir: output/
+
+  # Terraform files are written under {provider}-migration/{resource_type}/{name}.tf at repo root.
+  # Example: aws-migration/networking/vpc.tf
+  # resource_type values: networking | compute | storage | placement
+  structure: "{provider}-migration/{resource_type}/{name}.tf"
+
+  write_quarantine_report: true
+  quarantine_report_filename: quarantine_report.json
+
+  write_review_notes: true
+  review_notes_filename: review_notes.md
+
+  # Overwrite existing files in output/ (set false to protect manual edits)
+  overwrite: true
+
+# ─── VSPHERE MAPPING ─────────────────────────────────────────────────────────
+vsphere:
+  # DRS rule type strings as they appear in VMware API
+  # Maps to ClusterSemantics enum in cim/schema.py
+  drs_rule_mapping:
+    ShouldRunOnSameHost: affinity
+    ShouldNotRunOnSameHost: anti_affinity
+    MustRunOnSameHost: affinity
+    MustNotRunOnSameHost: anti_affinity
+
+  # VMware blockers that cause quarantine (no HCL generated)
+  hard_blockers:
+    - encrypted_vm_present
+    - rdm_disk_present
+    - shared_disk_present
+
+  # VMware blockers that cause needs_review (HCL generated with TODO comments)
+  soft_blockers:
+    - vtpm_present
+    - mounted_iso_present
+    - vapp_config_present
+
+# ─── TAGGING ─────────────────────────────────────────────────────────────────
+# These tags are injected into every generated resource
+# Values are templates — {variable} substituted at generation time
+required_tags:
+  Environment: "{environment}"          # passed via CLI flag
+  Owner: "{owner}"                      # passed via CLI flag
+  MigratedFrom: "vmware-vcenter"
+  MigrationTool: "vmware-migration-agent"
+  SourceVCenter: "{source_vcenter}"     # from discovery JSON metadata
+  GeneratedAt: "{generated_at}"         # ISO timestamp
+
+# ─── LOGGING ─────────────────────────────────────────────────────────────────
+logging:
+  # loguru level: TRACE | DEBUG | INFO | WARNING | ERROR
+  level: INFO
+  # json: structured JSON logs for CI/CD pipelines
+  # console: human-readable for local development
+  format: console
+  # Optional second sink: keep structured logs for debugging while console stays readable
+  detailed_log_file: app-logs.txt
+  detailed_log_level: TRACE

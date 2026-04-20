@@ -1,0 +1,96 @@
+stages:
+  - verify
+  - test
+  - migrate
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  PYTHONUNBUFFERED: "1"
+  TARGET_CLOUD: "aws"
+  LLM_PROVIDER: "anthropic"
+  ENVIRONMENT: "ci"
+  OWNER: "platform-team"
+
+cache:
+  paths:
+    - .cache/pip
+
+.default_python_job:
+  image: python:3.12-slim
+  before_script:
+    - python --version
+    - pip install --upgrade pip
+    - pip install .
+
+verify:python-syntax:
+  extends: .default_python_job
+  stage: verify
+  script:
+    - python -m compileall agent cim providers validation cli
+
+verify:security-policies-present:
+  extends: .default_python_job
+  stage: verify
+  script:
+    - test -f validation/policies/no_public_s3.rego
+    - test -f validation/policies/no_open_ingress.rego
+    - test -f validation/policies/encryption_at_rest.rego
+    - test -f validation/policies/tags_required.rego
+
+unit-tests:
+  extends: .default_python_job
+  stage: test
+  script:
+    - |
+      if [ -d tests ]; then
+        pytest -q
+      else
+        echo "No tests directory found; skipping tests."
+      fi
+
+migrate:run:
+  extends: .default_python_job
+  stage: migrate
+  services:
+    - docker:dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - python --version
+    - pip install --upgrade pip
+    - pip install .
+    - apt-get update
+    - apt-get install -y --no-install-recommends curl unzip ca-certificates
+    - rm -rf /var/lib/apt/lists/*
+    - curl -fsSL -o /tmp/terraform.zip "https://releases.hashicorp.com/terraform/1.8.5/terraform_1.8.5_linux_amd64.zip"
+    - unzip /tmp/terraform.zip -d /usr/local/bin
+    - rm -f /tmp/terraform.zip
+    - curl -fsSL -o /tmp/tflint.zip "https://github.com/terraform-linters/tflint/releases/download/v0.53.0/tflint_linux_amd64.zip"
+    - unzip /tmp/tflint.zip -d /usr/local/bin
+    - chmod +x /usr/local/bin/tflint
+    - rm -f /tmp/tflint.zip
+    - curl -fsSL -o /usr/local/bin/opa "https://openpolicyagent.org/downloads/v0.68.0/opa_linux_amd64_static"
+    - chmod +x /usr/local/bin/opa
+    - terraform version
+    - tflint --version
+    - opa version
+  script:
+    - |
+      if [ -z "$LLM_API_KEY" ]; then
+        echo "LLM_API_KEY is not set. Configure it as a protected CI variable." >&2
+        exit 1
+      fi
+    - python -m cli.main terragen --input discovery.json -c "$TARGET_CLOUD" -p "$LLM_PROVIDER" -e "$ENVIRONMENT" --owner "$OWNER" --config config.yaml --output-dir output
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - output/
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_COMMIT_BRANCH'
+      when: manual
+      allow_failure: true

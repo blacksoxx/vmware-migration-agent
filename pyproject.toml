@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vmware-migration-agent"
+version = "0.1.0"
+description = "VMware discovery JSON to cloud Terraform HCL migration agent"
+readme = "AGENTS.md"
+requires-python = ">=3.12"
+dependencies = [
+  "langgraph>=0.2",
+  "pydantic>=2,<3",
+  "click>=8",
+  "loguru>=0.7",
+  "anthropic>=0.34",
+  "openai>=1.0",
+  "google-genai>=1.0",
+  "chromadb>=0.5",
+  "python-dotenv>=1.0",
+  "pyyaml>=6.0",
+  "pytest>=8.0",
+  "hypothesis>=6.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+  "agent*",
+  "cim*",
+  "cli*",
+  "providers*",
+  "validation*",
+]
+namespaces = true
+
+[project.scripts]
+vma = "cli.main:main"

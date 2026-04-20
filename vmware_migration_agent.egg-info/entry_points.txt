@@ -1,0 +1,2 @@
+[console_scripts]
+vma = cli.main:main

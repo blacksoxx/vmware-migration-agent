@@ -1,0 +1,67 @@
+# AGENTS.md — Project context for AI coding assistants
+
+This file is read by Claude Code, Cursor, Copilot, and any other AI coding tool
+working in this repository. It is the authoritative source of project intent,
+constraints, and design decisions.
+
+## Project purpose
+Convert VMware vSphere discovery JSON (produced by an Ansible collection) into
+deployable Terraform HCL for a target cloud provider (AWS, Azure, GCP, or OpenStack).
+Runs as a CLI tool inside a GitLab CI/CD pipeline.
+
+## Core constraint
+This is a data transformation pipeline, not a chatbot. LLM calls happen in exactly
+two places: HCL generation and report writing. All other logic is deterministic Python.
+When in doubt about whether something should use an LLM — it should not.
+
+## The transformation pipeline
+VMware JSON → [ingest] → [blocker check] → [enrich] → CIM → [size] → [RAG] → [HCL gen] → [validate] → output/
+
+The CIM (Canonical Infrastructure Model) is the central artifact. It is the contract
+between the VMware world and the cloud provider world. Never bypass it.
+
+## Key files to read before coding
+- `cim/schema.py`             — understand all data models before touching any node
+- `agent/state.py`            — understand MigrationState before touching the graph
+- `agent/graph.py`            — understand the full node graph before adding nodes
+- `providers/base.py`         — understand the ProviderModule interface before adding a provider
+- `config.yaml`               — all runtime config lives here
+
+## Design decisions already made — do not revisit
+1. LangGraph (not CrewAI) for orchestration
+2. Swappable LLM via LLMClient abstraction (Anthropic / OpenAI / Google)
+3. 1:1 vDS topology reconstruction (not flattened)
+4. DRS clusters map to cloud-native equivalents via ClusterSemantics enum
+4. Temperature 0.0 for HCL generation (deterministic output)
+5. OPA for security policy enforcement (not ad-hoc checks)
+6. Output to output/ directory (not GitLab MR — that is out of scope for now)
+7. Pydantic v2 for all models
+8. Click for CLI
+
+## Non-negotiable security rules
+- No public S3 buckets in generated HCL
+- No 0.0.0.0/0 ingress in security groups
+- Encrypted VMs are quarantined, not migrated
+- All generated resources must have Environment, Owner, MigratedFrom tags
+
+## How to add a new resource type
+1. Add the Pydantic model to `cim/schema.py`
+2. Add the translation logic to `cim/vmware_translator.py`
+3. Add a new file per provider in each `providers/{provider}/` subpackage
+4. Add an OPA policy if the resource has security implications
+5. Update `cim.schema.json` — bump patch version
+
+## How to add a new cloud provider
+1. Create `providers/{name}/` with compute.py, network.py, storage.py, sizing_table.py
+2. Implement the `ProviderModule` abstract base class from `providers/base.py`
+3. Register the provider in `agent/llm_client.py` provider routing
+4. Add sizing anchors to sizing_table.py
+5. Add provider to the `target_cloud` enum in config.yaml comments
+
+## Testing expectations
+- Every node function has a unit test in `tests/nodes/`
+- CIM translation has property-based tests (hypothesis) in `tests/cim/`
+- Sizing lookup has parametrized tests covering edge cases (exact match, ceiling, max)
+- OPA policies have rego unit tests in `validation/policies/tests/`
+- Integration test uses the sample `discovery.json` at repo root
+- No tests write to `output/` — use `tmp_path` pytest fixture

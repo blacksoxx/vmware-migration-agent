@@ -1,0 +1,323 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cim.schema.json",
+  "title": "CanonicalInfrastructureModel",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_vcenter",
+    "target_provider",
+    "network_topology"
+  ],
+  "properties": {
+    "cim_schema_version": {
+      "type": "string",
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Cim Schema Version"
+    },
+    "source_vcenter": {
+      "type": "string",
+      "title": "Source Vcenter"
+    },
+    "target_provider": {
+      "$ref": "#/$defs/TargetProvider"
+    },
+    "network_topology": {
+      "$ref": "#/$defs/NetworkTopology"
+    },
+    "clusters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ComputeCluster"
+      },
+      "default": [],
+      "title": "Clusters"
+    },
+    "compute_units": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ComputeUnit"
+      },
+      "default": [],
+      "title": "Compute Units"
+    }
+  },
+  "$defs": {
+    "TargetProvider": {
+      "type": "string",
+      "title": "TargetProvider",
+      "enum": [
+        "aws",
+        "azure",
+        "gcp",
+        "openstack"
+      ]
+    },
+    "MigrationStatus": {
+      "type": "string",
+      "title": "MigrationStatus",
+      "enum": [
+        "ready",
+        "blocked",
+        "needs_review"
+      ]
+    },
+    "ClusterSemantics": {
+      "type": "string",
+      "title": "ClusterSemantics",
+      "enum": [
+        "ha",
+        "anti_affinity",
+        "affinity",
+        "lb",
+        "unknown"
+      ]
+    },
+    "PortGroup": {
+      "type": "object",
+      "title": "PortGroup",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "vlan_id"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "vlan_id": {
+          "type": "string",
+          "title": "Vlan Id"
+        }
+      }
+    },
+    "DistributedSwitch": {
+      "type": "object",
+      "title": "DistributedSwitch",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "port_groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PortGroup"
+          },
+          "default": [],
+          "title": "Port Groups"
+        }
+      }
+    },
+    "NetworkTopology": {
+      "type": "object",
+      "title": "NetworkTopology",
+      "additionalProperties": false,
+      "properties": {
+        "distributed_switches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DistributedSwitch"
+          },
+          "default": [],
+          "title": "Distributed Switches"
+        }
+      }
+    },
+    "NIC": {
+      "type": "object",
+      "title": "NIC",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "port_group_ref"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "port_group_ref": {
+          "type": "string",
+          "title": "Port Group Ref"
+        },
+        "mac_address": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mac Address"
+        }
+      }
+    },
+    "StorageVolume": {
+      "type": "object",
+      "title": "StorageVolume",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "size_gb"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "Id"
+        },
+        "size_gb": {
+          "type": "integer",
+          "minimum": 1,
+          "title": "Size Gb"
+        },
+        "datastore": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Datastore"
+        },
+        "thin_provisioned": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thin Provisioned"
+        },
+        "is_encrypted": {
+          "type": "boolean",
+          "default": false,
+          "title": "Is Encrypted"
+        },
+        "is_shared": {
+          "type": "boolean",
+          "default": false,
+          "title": "Is Shared"
+        },
+        "is_rdm": {
+          "type": "boolean",
+          "default": false,
+          "title": "Is Rdm"
+        }
+      }
+    },
+    "ComputeCluster": {
+      "type": "object",
+      "title": "ComputeCluster",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "semantics": {
+          "$ref": "#/$defs/ClusterSemantics",
+          "default": "unknown"
+        }
+      }
+    },
+    "ComputeUnit": {
+      "type": "object",
+      "title": "ComputeUnit",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "vcpus",
+        "ram_mb"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "Id"
+        },
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "vcpus": {
+          "type": "integer",
+          "minimum": 1,
+          "title": "Vcpus"
+        },
+        "ram_mb": {
+          "type": "integer",
+          "minimum": 1,
+          "title": "Ram Mb"
+        },
+        "migration_status": {
+          "$ref": "#/$defs/MigrationStatus",
+          "default": "ready"
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "title": "Blockers"
+        },
+        "cluster_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cluster Ref"
+        },
+        "is_encrypted": {
+          "type": "boolean",
+          "default": false,
+          "title": "Is Encrypted"
+        },
+        "has_vtpm": {
+          "type": "boolean",
+          "default": false,
+          "title": "Has Vtpm"
+        },
+        "nics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NIC"
+          },
+          "default": [],
+          "title": "Nics"
+        },
+        "storage_volumes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StorageVolume"
+          },
+          "default": [],
+          "title": "Storage Volumes"
+        }
+      }
+    }
+  }
+}
