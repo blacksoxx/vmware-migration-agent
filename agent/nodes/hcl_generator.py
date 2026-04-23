@@ -823,9 +823,12 @@ def _synthesize_provider_runtime_scaffold(
         if not path.endswith(".tf"):
             continue
 
+        relative = path[len(root_dir) + 1 :]
+        is_root_tf = "/" not in relative
+
         sanitized = _strip_top_level_blocks(
             content,
-            block_types={"terraform", "provider", "variable"},
+            block_types={"terraform", "provider", *( {"variable"} if is_root_tf else set() )},
         )
         synthesized[path] = sanitized if sanitized else "# Removed duplicate provider/runtime blocks.\n"
 
@@ -899,6 +902,34 @@ def _synthesize_provider_runtime_scaffold(
                 'variable "migrated_from" {',
                 "  type    = string",
                 f'  default = {json.dumps(migrated_from_default, ensure_ascii=True)}',
+                "}",
+                "",
+            ]
+        )
+
+    module_dirs: set[str] = set()
+    module_pattern = re.compile(r'\bresource\s+"openstack_[^"]+"\s+"[^"]+"')
+    for path, content in synthesized.items():
+        if not path.startswith(f"{root_dir}/") or not path.endswith(".tf"):
+            continue
+        relative = path[len(root_dir) + 1 :]
+        if "/" not in relative:
+            continue
+        parent_dir = path.rsplit("/", 1)[0]
+        if module_pattern.search(content):
+            module_dirs.add(parent_dir)
+
+    for module_dir in module_dirs:
+        module_providers_path = f"{module_dir}/providers.tf"
+        synthesized[module_providers_path] = "\n".join(
+            [
+                "terraform {",
+                "  required_providers {",
+                "    openstack = {",
+                "      source  = \"terraform-provider-openstack/openstack\"",
+                "      version = \"~> 2.1\"",
+                "    }",
+                "  }",
                 "}",
                 "",
             ]

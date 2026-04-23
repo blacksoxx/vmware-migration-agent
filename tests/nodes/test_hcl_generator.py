@@ -465,7 +465,8 @@ def test_synthesize_provider_runtime_scaffold_for_openstack_adds_provider_and_va
                 'resource "openstack_compute_instance_v2" "vm" {}',
             ]
         )
-        + "\n"
+        + "\n",
+        "openstack-migration/compute/main.tf": 'resource "openstack_compute_instance_v2" "vm" {}\n',
     }
 
     updated = hcl_module._synthesize_provider_runtime_scaffold(
@@ -485,6 +486,10 @@ def test_synthesize_provider_runtime_scaffold_for_openstack_adds_provider_and_va
     main_tf = updated["openstack-migration/main.tf"]
     assert "required_providers" not in main_tf
     assert 'provider "openstack"' not in main_tf
+
+    assert "openstack-migration/compute/providers.tf" in updated
+    compute_providers_tf = updated["openstack-migration/compute/providers.tf"]
+    assert 'source  = "terraform-provider-openstack/openstack"' in compute_providers_tf
 
     assert "openstack-migration/variables.tf" in updated
     variables_tf = updated["openstack-migration/variables.tf"]
