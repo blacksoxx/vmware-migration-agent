@@ -871,56 +871,70 @@ def _synthesize_provider_runtime_scaffold(
         ]
     )
 
-    if variables_path not in synthesized:
-        synthesized[variables_path] = "\n".join(
-            [
-                'variable "auth_url" {',
-                "  type = string",
-                "}",
-                "",
-                'variable "user_name" {',
-                "  type = string",
-                "}",
-                "",
-                'variable "password" {',
-                "  type      = string",
-                "  sensitive = true",
-                "}",
-                "",
-                'variable "tenant_name" {',
-                "  type = string",
-                "}",
-                "",
-                'variable "domain_name" {',
-                "  type    = string",
-                '  default = "Default"',
-                "}",
-                "",
-                'variable "region" {',
-                "  type = string",
-                "}",
-                "",
-                'variable "external_network_id" {',
-                "  type = string",
-                "}",
-                "",
-                'variable "environment" {',
-                "  type    = string",
-                f'  default = {json.dumps(env_default, ensure_ascii=True)}',
-                "}",
-                "",
-                'variable "owner" {',
-                "  type    = string",
-                f'  default = {json.dumps(owner_default, ensure_ascii=True)}',
-                "}",
-                "",
-                'variable "migrated_from" {',
-                "  type    = string",
-                f'  default = {json.dumps(migrated_from_default, ensure_ascii=True)}',
-                "}",
-                "",
-            ]
-        )
+    synthesized[variables_path] = "\n".join(
+        [
+            'variable "auth_url" {',
+            "  type = string",
+            "}",
+            "",
+            'variable "user_name" {',
+            "  type = string",
+            "}",
+            "",
+            'variable "password" {',
+            "  type      = string",
+            "  sensitive = true",
+            "}",
+            "",
+            'variable "tenant_name" {',
+            "  type = string",
+            "}",
+            "",
+            'variable "domain_name" {',
+            "  type    = string",
+            '  default = "Default"',
+            "}",
+            "",
+            'variable "region" {',
+            "  type = string",
+            "}",
+            "",
+            'variable "external_network_id" {',
+            "  type = string",
+            "}",
+            "",
+            'variable "default_image_name" {',
+            "  type    = string",
+            '  default = ""',
+            "}",
+            "",
+            'variable "key_pair_name" {',
+            "  type    = string",
+            '  default = ""',
+            "}",
+            "",
+            'variable "encrypted_volume_type" {',
+            "  type    = string",
+            '  default = "encrypted"',
+            "}",
+            "",
+            'variable "environment" {',
+            "  type    = string",
+            f'  default = {json.dumps(env_default, ensure_ascii=True)}',
+            "}",
+            "",
+            'variable "owner" {',
+            "  type    = string",
+            f'  default = {json.dumps(owner_default, ensure_ascii=True)}',
+            "}",
+            "",
+            'variable "migrated_from" {',
+            "  type    = string",
+            f'  default = {json.dumps(migrated_from_default, ensure_ascii=True)}',
+            "}",
+            "",
+        ]
+    )
 
     module_dirs: set[str] = set()
     module_pattern = re.compile(r'\bresource\s+"openstack_[^"]+"\s+"[^"]+"')
@@ -1168,7 +1182,7 @@ def _ensure_runnable_hcl(provider: str, hcl_output: dict[str, str]) -> None:
 
 def _normalize_provider_specific_hcl(provider: str, hcl_output: dict[str, str]) -> dict[str, str]:
     normalized_provider = provider.strip().lower()
-    if normalized_provider not in {"azure", "gcp"}:
+    if normalized_provider not in {"azure", "gcp", "openstack"}:
         return hcl_output
 
     normalized: dict[str, str] = {}
@@ -1180,6 +1194,9 @@ def _normalize_provider_specific_hcl(provider: str, hcl_output: dict[str, str]) 
 
         if normalized_provider == "gcp":
             normalized_content = _normalize_gcp_generated_hcl(normalized_content)
+
+        if normalized_provider == "openstack":
+            normalized_content = _normalize_openstack_generated_hcl(normalized_content)
 
         normalized[path] = normalized_content
 
@@ -1246,6 +1263,11 @@ def _normalize_gcp_generated_hcl(content: str) -> str:
         map_names={"labels", "common_tags", "common_labels"},
     )
     return normalized
+
+
+def _normalize_openstack_generated_hcl(content: str) -> str:
+    # The OpenStack provider does not accept mac_address in instance network blocks.
+    return re.sub(r"(?m)^\s*mac_address\s*=\s*[^\n]+\n?", "", content)
 
 
 def _normalize_gcp_map_keys(content: str, map_names: set[str]) -> str:

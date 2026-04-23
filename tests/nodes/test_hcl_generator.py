@@ -302,6 +302,28 @@ def test_normalize_provider_specific_hcl_is_noop_for_aws() -> None:
     assert updated == hcl_output
 
 
+def test_normalize_provider_specific_hcl_strips_openstack_mac_address() -> None:
+    openstack_main = "\n".join(
+        [
+            'resource "openstack_compute_instance_v2" "vm" {',
+            '  name = "vm"',
+            '  network {',
+            '    name        = "net"',
+            '    mac_address = "00:0c:29:db:b0:b8"',
+            '  }',
+            '}',
+        ]
+    )
+
+    updated = hcl_module._normalize_provider_specific_hcl(
+        provider="openstack",
+        hcl_output={"openstack-migration/main.tf": openstack_main},
+    )
+
+    normalized = updated["openstack-migration/main.tf"]
+    assert "mac_address" not in normalized
+
+
 def test_normalize_provider_specific_hcl_normalizes_gcp_image_and_label_keys() -> None:
     gcp_main = "\n".join(
         [
@@ -444,6 +466,9 @@ def test_build_provider_fallback_hcl_returns_openstack_files() -> None:
     assert "openstack-migration/compute/app-1.tf" in fallback
     assert "openstack-migration/storage/app-1_disks.tf" in fallback
 
+    compute_tf = fallback["openstack-migration/compute/app-1.tf"]
+    assert "openstack_networking_network_v2.dvs_main.name" in compute_tf
+
 
 def test_synthesize_provider_runtime_scaffold_for_openstack_adds_provider_and_variables() -> None:
     hcl_output = {
@@ -495,5 +520,8 @@ def test_synthesize_provider_runtime_scaffold_for_openstack_adds_provider_and_va
     variables_tf = updated["openstack-migration/variables.tf"]
     assert 'variable "auth_url" {' in variables_tf
     assert 'variable "external_network_id" {' in variables_tf
+    assert 'variable "default_image_name" {' in variables_tf
+    assert 'variable "key_pair_name" {' in variables_tf
+    assert 'variable "encrypted_volume_type" {' in variables_tf
     assert 'default = "prod"' in variables_tf
     assert 'default = "platform-team"' in variables_tf
