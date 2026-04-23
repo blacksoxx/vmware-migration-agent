@@ -402,3 +402,30 @@ def test_build_provider_fallback_hcl_is_empty_for_non_gcp() -> None:
     )
 
     assert fallback == {}
+
+
+def test_synthesize_provider_runtime_scaffold_for_openstack_adds_provider_and_variables() -> None:
+    hcl_output = {
+        "openstack-migration/main.tf": 'resource "openstack_networking_network_v2" "net" {}\nresource "openstack_networking_subnet_v2" "subnet" {}\nresource "openstack_networking_secgroup_v2" "sg" {}\nresource "openstack_compute_instance_v2" "vm" {}\n'
+    }
+
+    updated = hcl_module._synthesize_provider_runtime_scaffold(
+        provider="openstack",
+        hcl_output=hcl_output,
+        required_tags={
+            "Environment": "prod",
+            "Owner": "platform-team",
+        },
+    )
+
+    assert "openstack-migration/providers.tf" in updated
+    providers_tf = updated["openstack-migration/providers.tf"]
+    assert 'source  = "terraform-provider-openstack/openstack"' in providers_tf
+    assert 'provider "openstack" {' in providers_tf
+
+    assert "openstack-migration/variables.tf" in updated
+    variables_tf = updated["openstack-migration/variables.tf"]
+    assert 'variable "auth_url" {' in variables_tf
+    assert 'variable "external_network_id" {' in variables_tf
+    assert 'default = "prod"' in variables_tf
+    assert 'default = "platform-team"' in variables_tf
