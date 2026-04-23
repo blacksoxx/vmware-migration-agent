@@ -251,6 +251,14 @@ def _deterministic_validate_hcl(
     validation_cfg = _get_mapping(config, "validation")
 
     run_tflint = _get_bool(validation_cfg, "run_tflint", True)
+    if run_tflint and _is_openstack_hcl_output(hcl_output):
+        run_tflint_openstack = _get_bool(validation_cfg, "run_tflint_openstack", False)
+        if not run_tflint_openstack:
+            logger.info(
+                "hcl_generator: skipping tflint for openstack output (set validation.run_tflint_openstack=true to enable)"
+            )
+            run_tflint = False
+
     run_opa = _get_bool(validation_cfg, "run_opa", True)
     terraform_bin = _get_str(validation_cfg, "terraform_bin", "terraform")
     tflint_bin = _get_str(validation_cfg, "tflint_bin", "tflint")
@@ -523,6 +531,13 @@ def _provider_migration_root(provider: str) -> str:
     if not normalized:
         raise HCLGenerationError("hcl_generator: provider is required for output path validation")
     return f"{normalized}-migration"
+
+
+def _is_openstack_hcl_output(hcl_output: dict[str, str]) -> bool:
+    if not hcl_output:
+        return False
+
+    return any(path.replace("\\", "/").startswith("openstack-migration/") for path in hcl_output)
 
 
 def _enforce_security_guards(hcl_output: dict[str, str]) -> None:

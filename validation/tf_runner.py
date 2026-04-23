@@ -72,7 +72,11 @@ def validate_hcl(
         )
         if validate_result.returncode != 0:
             result.errors.append(f"terraform validate failed: {validate_result.output}")
-            logger.error("tf_runner: terraform validate failed")
+            logger.error(
+                "tf_runner: terraform validate failed in {}: {}",
+                str(terraform_cwd),
+                validate_result.output[:1000] if validate_result.output else "<no output>",
+            )
         else:
             result.terraform_validate_passed = True
 
@@ -80,7 +84,11 @@ def validate_hcl(
             tflint_result = _run_command([tflint_bin, "--no-color"], cwd=terraform_cwd)
             if tflint_result.returncode != 0:
                 result.errors.append(f"tflint failed: {tflint_result.output}")
-                logger.error("tf_runner: tflint failed")
+                logger.error(
+                    "tf_runner: tflint failed in {}: {}",
+                    str(terraform_cwd),
+                    tflint_result.output[:1000] if tflint_result.output else "<no output>",
+                )
             else:
                 result.tflint_passed = True
 
