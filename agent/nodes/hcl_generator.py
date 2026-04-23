@@ -182,9 +182,15 @@ def hcl_generator(state: MigrationState) -> MigrationState:
         try:
             _validate_output_paths(provider=provider, hcl_output=fallback_output)
             _enforce_security_guards(fallback_output)
+            fallback_output = _synthesize_root_main_tf(provider=provider, hcl_output=fallback_output)
             fallback_output = _normalize_provider_specific_hcl(
                 provider=provider,
                 hcl_output=fallback_output,
+            )
+            fallback_output = _synthesize_provider_runtime_scaffold(
+                provider=provider,
+                hcl_output=fallback_output,
+                required_tags=_required_tags(config),
             )
             _ensure_runnable_hcl(provider=provider, hcl_output=fallback_output)
         except HCLGenerationError as exc:
@@ -1244,13 +1250,35 @@ def _build_provider_fallback_hcl(
     required_tags: dict[str, str],
 ) -> dict[str, str]:
     normalized_provider = provider.strip().lower()
-    if normalized_provider != "gcp":
-        return {}
+    if normalized_provider == "gcp":
+        return _build_deterministic_gcp_fallback_hcl(
+            sized_cim=sized_cim,
+            required_tags=required_tags,
+        )
 
-    return _build_deterministic_gcp_fallback_hcl(
-        sized_cim=sized_cim,
-        required_tags=required_tags,
-    )
+    if normalized_provider == "openstack":
+        return _build_deterministic_openstack_fallback_hcl(
+            sized_cim=sized_cim,
+            required_tags=required_tags,
+        )
+
+    return {}
+
+
+def _build_deterministic_openstack_fallback_hcl(
+    sized_cim: CanonicalInfrastructureModel,
+    required_tags: dict[str, str],
+) -> dict[str, str]:
+    from providers.openstack.compute import render_compute as render_openstack_compute
+    from providers.openstack.network import render_networking as render_openstack_networking
+    from providers.openstack.storage import render_storage as render_openstack_storage
+
+    output: dict[str, str] = {}
+    output.update(render_openstack_networking(sized_cim))
+    output.update(render_openstack_compute(sized_cim, required_tags=required_tags))
+    output.update(render_openstack_storage(sized_cim, required_tags=required_tags))
+
+    return output
 
 
 def _build_deterministic_gcp_fallback_hcl(

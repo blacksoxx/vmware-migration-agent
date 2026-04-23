@@ -404,6 +404,47 @@ def test_build_provider_fallback_hcl_is_empty_for_non_gcp() -> None:
     assert fallback == {}
 
 
+def test_build_provider_fallback_hcl_returns_openstack_files() -> None:
+    cim = CanonicalInfrastructureModel(
+        source_vcenter="vc01.local",
+        target_provider=TargetProvider.OPENSTACK,
+        network_topology=NetworkTopology(
+            distributed_switches=[
+                DistributedSwitch(
+                    name="dvs-main",
+                    port_groups=[PortGroup(name="pg-app", vlan_id="100")],
+                )
+            ]
+        ),
+        compute_units=[
+            ComputeUnit(
+                id="cu-1",
+                name="app-1",
+                vcpus=2,
+                ram_mb=4096,
+                migration_status=MigrationStatus.READY,
+                nics=[NIC(name="nic0", port_group_ref="pg-app")],
+            )
+        ],
+    )
+
+    fallback = hcl_module._build_provider_fallback_hcl(
+        provider="openstack",
+        sized_cim=cim,
+        required_tags={
+            "Environment": "prod",
+            "Owner": "platform-team",
+            "MigratedFrom": "vmware-vcenter",
+        },
+    )
+
+    assert "openstack-migration/networking/vpc.tf" in fallback
+    assert "openstack-migration/networking/subnets.tf" in fallback
+    assert "openstack-migration/networking/security_groups.tf" in fallback
+    assert "openstack-migration/compute/app-1.tf" in fallback
+    assert "openstack-migration/storage/app-1_disks.tf" in fallback
+
+
 def test_synthesize_provider_runtime_scaffold_for_openstack_adds_provider_and_variables() -> None:
     hcl_output = {
         "openstack-migration/main.tf": 'resource "openstack_networking_network_v2" "net" {}\nresource "openstack_networking_subnet_v2" "subnet" {}\nresource "openstack_networking_secgroup_v2" "sg" {}\nresource "openstack_compute_instance_v2" "vm" {}\n'

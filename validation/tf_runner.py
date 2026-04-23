@@ -51,19 +51,24 @@ def validate_hcl(
     with tempfile.TemporaryDirectory(prefix="vmware-migration-agent-tf-") as temp_dir:
         workspace = Path(temp_dir)
         _write_hcl_files(workspace, hcl_output)
+        terraform_cwd = _resolve_terraform_workdir(workspace, hcl_output)
 
         init_result = _run_command(
             [terraform_bin, "init", "-backend=false", "-input=false", "-no-color"],
-            cwd=workspace,
+            cwd=terraform_cwd,
         )
         if init_result.returncode != 0:
             result.errors.append(f"terraform init failed: {init_result.output}")
-            logger.error("tf_runner: terraform init failed")
+            logger.error(
+                "tf_runner: terraform init failed in {}: {}",
+                str(terraform_cwd),
+                init_result.output[:1000] if init_result.output else "<no output>",
+            )
             return result
 
         validate_result = _run_command(
             [terraform_bin, "validate", "-no-color"],
-            cwd=workspace,
+            cwd=terraform_cwd,
         )
         if validate_result.returncode != 0:
             result.errors.append(f"terraform validate failed: {validate_result.output}")
@@ -72,7 +77,7 @@ def validate_hcl(
             result.terraform_validate_passed = True
 
         if run_tflint:
-            tflint_result = _run_command([tflint_bin, "--no-color"], cwd=workspace)
+            tflint_result = _run_command([tflint_bin, "--no-color"], cwd=terraform_cwd)
             if tflint_result.returncode != 0:
                 result.errors.append(f"tflint failed: {tflint_result.output}")
                 logger.error("tf_runner: tflint failed")
@@ -94,6 +99,26 @@ def _write_hcl_files(workspace: Path, hcl_output: dict[str, str]) -> None:
         destination = workspace / relative_path
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(content, encoding="utf-8")
+
+
+def _resolve_terraform_workdir(workspace: Path, hcl_output: dict[str, str]) -> Path:
+    """Prefer the common provider root (e.g. openstack-migration/) when all files share it."""
+    roots: set[str] = set()
+
+    for raw_path in hcl_output:
+        relative_path = Path(str(raw_path).replace("\\", "/"))
+        if relative_path.parts:
+            roots.add(relative_path.parts[0])
+
+    if len(roots) != 1:
+        return workspace
+
+    root = next(iter(roots))
+    candidate = workspace / root
+    if candidate.is_dir():
+        return candidate
+
+    return workspace
 
 
 def _run_command(command: list[str], cwd: Path) -> CommandResult:
