@@ -146,13 +146,16 @@ def hcl_generator(state: MigrationState) -> MigrationState:
             next_state["messages"] = messages
             next_state["status"] = "running"
 
+            hcl_output = _synthesize_provider_runtime_scaffold(
+                provider=provider,
+                hcl_output=hcl_output,
+                required_tags=_required_tags(config),
+            )
+
+            next_state["hcl_output"] = hcl_output
+
             logger.info(
                 "hcl_generator: generated {} HCL files for provider {} on attempt {}",
-                    hcl_output = _synthesize_provider_runtime_scaffold(
-                        provider=provider,
-                        hcl_output=hcl_output,
-                        required_tags=_required_tags(config),
-                    )
                 len(hcl_output),
                 provider,
                 attempt,
