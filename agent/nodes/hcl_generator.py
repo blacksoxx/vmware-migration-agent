@@ -814,30 +814,44 @@ def _synthesize_provider_runtime_scaffold(
 
     synthesized = dict(hcl_output)
 
-    if providers_path not in synthesized:
-        synthesized[providers_path] = "\n".join(
-            [
-                "terraform {",
-                "  required_version = \">= 1.5.0\"",
-                "  required_providers {",
-                "    openstack = {",
-                "      source  = \"terraform-provider-openstack/openstack\"",
-                "      version = \"~> 2.1\"",
-                "    }",
-                "  }",
-                "}",
-                "",
-                'provider "openstack" {',
-                "  auth_url    = var.auth_url",
-                "  user_name   = var.user_name",
-                "  password    = var.password",
-                "  tenant_name = var.tenant_name",
-                "  domain_name = var.domain_name",
-                "  region      = var.region",
-                "}",
-                "",
-            ]
+    # Keep provider declarations in providers.tf only to avoid duplicate module-level blocks.
+    for path, content in list(synthesized.items()):
+        if not path.startswith(f"{root_dir}/"):
+            continue
+        if path == providers_path or path == variables_path:
+            continue
+        if not path.endswith(".tf"):
+            continue
+
+        sanitized = _strip_top_level_blocks(
+            content,
+            block_types={"terraform", "provider", "variable"},
         )
+        synthesized[path] = sanitized if sanitized else "# Removed duplicate provider/runtime blocks.\n"
+
+    synthesized[providers_path] = "\n".join(
+        [
+            "terraform {",
+            "  required_version = \">= 1.5.0\"",
+            "  required_providers {",
+            "    openstack = {",
+            "      source  = \"terraform-provider-openstack/openstack\"",
+            "      version = \"~> 2.1\"",
+            "    }",
+            "  }",
+            "}",
+            "",
+            'provider "openstack" {',
+            "  auth_url    = var.auth_url",
+            "  user_name   = var.user_name",
+            "  password    = var.password",
+            "  tenant_name = var.tenant_name",
+            "  domain_name = var.domain_name",
+            "  region      = var.region",
+            "}",
+            "",
+        ]
+    )
 
     if variables_path not in synthesized:
         synthesized[variables_path] = "\n".join(

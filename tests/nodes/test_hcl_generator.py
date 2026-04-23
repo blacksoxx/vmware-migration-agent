@@ -447,7 +447,25 @@ def test_build_provider_fallback_hcl_returns_openstack_files() -> None:
 
 def test_synthesize_provider_runtime_scaffold_for_openstack_adds_provider_and_variables() -> None:
     hcl_output = {
-        "openstack-migration/main.tf": 'resource "openstack_networking_network_v2" "net" {}\nresource "openstack_networking_subnet_v2" "subnet" {}\nresource "openstack_networking_secgroup_v2" "sg" {}\nresource "openstack_compute_instance_v2" "vm" {}\n'
+        "openstack-migration/main.tf": '\n'.join(
+            [
+                "terraform {",
+                "  required_providers {",
+                "    openstack = { source = \"hashicorp/openstack\" }",
+                "  }",
+                "}",
+                "",
+                'provider "openstack" {',
+                '  auth_url = "https://example.invalid"',
+                "}",
+                "",
+                'resource "openstack_networking_network_v2" "net" {}',
+                'resource "openstack_networking_subnet_v2" "subnet" {}',
+                'resource "openstack_networking_secgroup_v2" "sg" {}',
+                'resource "openstack_compute_instance_v2" "vm" {}',
+            ]
+        )
+        + "\n"
     }
 
     updated = hcl_module._synthesize_provider_runtime_scaffold(
@@ -463,6 +481,10 @@ def test_synthesize_provider_runtime_scaffold_for_openstack_adds_provider_and_va
     providers_tf = updated["openstack-migration/providers.tf"]
     assert 'source  = "terraform-provider-openstack/openstack"' in providers_tf
     assert 'provider "openstack" {' in providers_tf
+
+    main_tf = updated["openstack-migration/main.tf"]
+    assert "required_providers" not in main_tf
+    assert 'provider "openstack"' not in main_tf
 
     assert "openstack-migration/variables.tf" in updated
     variables_tf = updated["openstack-migration/variables.tf"]
