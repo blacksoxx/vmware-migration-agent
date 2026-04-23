@@ -100,6 +100,11 @@ def hcl_generator(state: MigrationState) -> MigrationState:
                 required_tags=_required_tags(config),
             )
             hcl_output = _normalize_provider_specific_hcl(provider=provider, hcl_output=hcl_output)
+            hcl_output = _synthesize_provider_runtime_scaffold(
+                provider=provider,
+                hcl_output=hcl_output,
+                required_tags=_required_tags(config),
+            )
             _ensure_runnable_hcl(provider=provider, hcl_output=hcl_output)
         except HCLGenerationError as exc:
             validation_feedback = f"errors:\n- {str(exc)}"
@@ -145,14 +150,6 @@ def hcl_generator(state: MigrationState) -> MigrationState:
             next_state["validation_result"] = cast(dict[str, object], deterministic_validation)
             next_state["messages"] = messages
             next_state["status"] = "running"
-
-            hcl_output = _synthesize_provider_runtime_scaffold(
-                provider=provider,
-                hcl_output=hcl_output,
-                required_tags=_required_tags(config),
-            )
-
-            next_state["hcl_output"] = hcl_output
 
             logger.info(
                 "hcl_generator: generated {} HCL files for provider {} on attempt {}",
@@ -788,6 +785,104 @@ def _synthesize_provider_module_layout(
             "",
         ]
     )
+
+    return synthesized
+
+
+def _synthesize_provider_runtime_scaffold(
+    provider: str,
+    hcl_output: dict[str, str],
+    required_tags: dict[str, str],
+) -> dict[str, str]:
+    normalized_provider = provider.strip().lower()
+    if normalized_provider != "openstack":
+        return hcl_output
+
+    root_dir = _provider_migration_root(normalized_provider)
+    providers_path = f"{root_dir}/providers.tf"
+    variables_path = f"{root_dir}/variables.tf"
+
+    env_default = str(required_tags.get("Environment", "dev"))
+    owner_default = str(required_tags.get("Owner", "platform-team"))
+    migrated_from_default = str(required_tags.get("MigratedFrom", "vmware-vcenter"))
+
+    synthesized = dict(hcl_output)
+
+    if providers_path not in synthesized:
+        synthesized[providers_path] = "\n".join(
+            [
+                "terraform {",
+                "  required_version = \">= 1.5.0\"",
+                "  required_providers {",
+                "    openstack = {",
+                "      source  = \"terraform-provider-openstack/openstack\"",
+                "      version = \"~> 2.1\"",
+                "    }",
+                "  }",
+                "}",
+                "",
+                'provider "openstack" {',
+                "  auth_url    = var.auth_url",
+                "  user_name   = var.user_name",
+                "  password    = var.password",
+                "  tenant_name = var.tenant_name",
+                "  domain_name = var.domain_name",
+                "  region      = var.region",
+                "}",
+                "",
+            ]
+        )
+
+    if variables_path not in synthesized:
+        synthesized[variables_path] = "\n".join(
+            [
+                'variable "auth_url" {',
+                "  type = string",
+                "}",
+                "",
+                'variable "user_name" {',
+                "  type = string",
+                "}",
+                "",
+                'variable "password" {',
+                "  type      = string",
+                "  sensitive = true",
+                "}",
+                "",
+                'variable "tenant_name" {',
+                "  type = string",
+                "}",
+                "",
+                'variable "domain_name" {',
+                "  type    = string",
+                '  default = "Default"',
+                "}",
+                "",
+                'variable "region" {',
+                "  type = string",
+                "}",
+                "",
+                'variable "external_network_id" {',
+                "  type = string",
+                "}",
+                "",
+                'variable "environment" {',
+                "  type    = string",
+                f'  default = {json.dumps(env_default, ensure_ascii=True)}',
+                "}",
+                "",
+                'variable "owner" {',
+                "  type    = string",
+                f'  default = {json.dumps(owner_default, ensure_ascii=True)}',
+                "}",
+                "",
+                'variable "migrated_from" {',
+                "  type    = string",
+                f'  default = {json.dumps(migrated_from_default, ensure_ascii=True)}',
+                "}",
+                "",
+            ]
+        )
 
     return synthesized
 
